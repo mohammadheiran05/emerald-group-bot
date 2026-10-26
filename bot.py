@@ -1,4 +1,6 @@
 import json
+from html import escape
+from datetime import datetime, timezone
 import logging
 import time
 
@@ -29,7 +31,7 @@ def is_owner(user_id):
     return user_id == OWNER_ID
 
 def safe_name(user):
-    return user.full_name or user.first_name or str(user.id)
+    return escape(user.full_name or user.first_name or str(user.id))
 
 async def is_group_admin(context, chat_id, user_id):
     """Return True only when the user is a Telegram admin of this group.
@@ -84,6 +86,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/top — ۱۰ عضو برتر بر اساس XP\n"
         "/rank — نمایش رتبه و پیشرفت لول\n"
         "/rewards — نشان‌های خودکار و راهنمای امتیاز ویژه\n"
+        "/league — لیگ فعلی\n"
+        "/missions — مأموریت روزانه\n"
+        "/achievements — دستاوردهای دائمی\n"
         "/admin_request — درخواست بررسی برای ادمین شدن\n"
         "/admin — باز کردن پنل مدیریت (فقط مدیر اصلی)"
     )
@@ -124,11 +129,11 @@ async def profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         custom = json.loads(m["custom_badges"] or "[]")
     except json.JSONDecodeError:
         custom = []
-    badge_text = " ".join(f"{b['emoji']} {b['name']}" for b in badges + custom) or "هنوز نشانی نگرفته‌ای"
+    badge_text = escape(" ".join(f"{b.get('emoji', '🏅')} {b.get('name', 'نشان')}" for b in badges + custom)) or "هنوز نشانی نگرفته‌ای"
     title = m["custom_title"] or rank
     await update.effective_message.reply_text(
         f"💚 <b>پروفایل {safe_name(user)}</b>\n\n"
-        f"🏷 لقب: <b>{title}</b>\n"
+        f"🏷 لقب: <b>{escape(str(title))}</b>\n"
         f"{icon} سطح: <b>{level}/100 · {rank}</b>\n"
         f"✨ XP: <b>{xp:,}</b>\n"
         f"📈 پیشرفت لول بعدی: <b>{pct}%</b> ({earned}/{required})\n"
@@ -150,8 +155,65 @@ async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for i, m in enumerate(members, 1):
         level = level_from_xp(m["xp"])
         rank, icon = rank_for_level(level)
-        lines.append(f"{i}. {icon} {m['full_name']} — لول {level} · {m['xp']:,} XP")
+        lines.append(f"{i}. {icon} {escape(str(m['full_name'] or m['user_id']))} — لول {level} · {m['xp']:,} XP")
     await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML")
+
+async def league_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat=update.effective_chat
+    if chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
+        await update.effective_message.reply_text("این دستور را داخل گروه بزن."); return
+    m=db.get_member(chat.id,update.effective_user.id)
+    if not m:
+        await update.effective_message.reply_text("هنوز اطلاعاتی ثبت نشده؛ چند پیام بفرست."); return
+    level=level_from_xp(m["xp"])
+    leagues=[(1,"🥉 برنز"),(11,"🥈 نقره"),(26,"🥇 طلا"),(46,"💎 الماس"),(66,"💚 زمرد")]
+    league=max((label for threshold,label in leagues if level>=threshold),default="🥉 برنز")
+    await update.effective_message.reply_text(f"🏆 لیگ فعلی: {league}\nلول: {level}/100\nXP: {m['xp']:,}\nرتبه‌بندی هر گروه مستقل است.")
+
+async def missions_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat=update.effective_chat; user=update.effective_user
+    if chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
+        await update.effective_message.reply_text("این دستور را داخل گروه بزن."); return
+    m=db.get_member(chat.id,user.id)
+    if not m:
+        await update.effective_message.reply_text("برای شروع مأموریت‌ها چند پیام در گروه بفرست."); return
+    today=datetime.now(timezone.utc).date()
+    day=today.isoformat(); iso=today.isocalendar(); week_key=f"{iso.year}-W{iso.week:02d}"
+    daily=int(m.get("xp_today",0)) if m.get("xp_day")==day else 0
+    weekly=int(m.get("xp_week",0)) if m.get("xp_week_key")==week_key else 0
+    messages=[f"🎯 مأموریت روزانه: {daily}/100 XP کسب‌شده",f"🗓️ مأموریت هفتگی: {weekly}/500 XP کسب‌شده"]
+    reward_text=[]
+    if daily>=100:
+        if db.claim_mission(chat.id,user.id,"daily_100xp",day):
+            db.award_admin_xp(chat.id,user.id,25,0,"پاداش مأموریت روزانه"); reward_text.append("مأموریت روزانه: +۲۵ XP")
+        else: messages.append("مأموریت روزانه: پاداش امروز قبلاً دریافت شده است.")
+    if weekly>=500:
+        if db.claim_mission(chat.id,user.id,"weekly_500xp",week_key):
+            db.award_admin_xp(chat.id,user.id,100,0,"پاداش مأموریت هفتگی"); reward_text.append("مأموریت هفتگی: +۱۰۰ XP")
+        else: messages.append("مأموریت هفتگی: پاداش این هفته قبلاً دریافت شده است.")
+    if reward_text: messages.append("✅ پاداش دریافت شد: "+"؛ ".join(reward_text))
+    elif daily<100 and weekly<500: messages.append("با پیام‌های عادی و غیرتکراری پیشرفت کن؛ پاداش هر مأموریت در هر دوره فقط یک بار پرداخت می‌شود.")
+    await update.effective_message.reply_text("\n".join(messages))
+
+async def achievements_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    chat=update.effective_chat; user=update.effective_user
+    if chat.type not in (ChatType.GROUP, ChatType.SUPERGROUP):
+        await update.effective_message.reply_text("این دستور را داخل گروه بزن."); return
+    m=db.get_member(chat.id,user.id)
+    if not m:
+        await update.effective_message.reply_text("هنوز اطلاعاتی ثبت نشده."); return
+    thresholds=[(100,"اولین صد XP"),(1000,"هزار XP"),(5000,"پنج هزار XP"),(10000,"ده هزار XP")]
+    earned=[]
+    for threshold,label in thresholds:
+        if int(m["xp"])>=threshold and db.earn_achievement(chat.id,user.id,str(threshold)):
+            earned.append(label)
+    existing=db.get_achievements(chat.id,user.id)
+    labels={str(t):name for t,name in thresholds}
+    lines=["🏅 <b>دستاوردهای دائمی</b>"]
+    lines += ["✅ "+labels.get(a["achievement_key"],a["achievement_key"]) for a in existing]
+    lines += ["هنوز دستاوردی نگرفته‌ای."] if not existing else []
+    if earned: lines.append("\nتازه دریافت شد: "+"، ".join(earned))
+    await update.effective_message.reply_text("\n".join(lines),parse_mode="HTML")
 
 async def rewards_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lines = [
@@ -197,14 +259,14 @@ async def group_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db.upsert_member(chat.id, user)
         return
     db.register_group(chat.id, chat.title or "گروه")
-    result = db.upsert_member(chat.id, user, XP_PER_MESSAGE, award_xp=True, cooldown_seconds=XP_COOLDOWN_SECONDS)
+    result = db.upsert_member(chat.id, user, XP_PER_MESSAGE, award_xp=True, cooldown_seconds=XP_COOLDOWN_SECONDS, message_text=(msg.text or msg.caption or ""))
     if result["got_xp"] and result["level"] > result["old_level"]:
         group = db.get_group(chat.id)
         if group and group["rankup_announcements"]:
             rank, icon = rank_for_level(result["level"])
             try:
                 await msg.reply_text(
-                    f"💚 تبریک {safe_name(user)}!\n{icon} به لول {result['level']} رسیدی؛ رتبه: {rank}."
+                    f"💚 تبریک {safe_name(user)}!\n{icon} به لول {result['level']} رسیدی؛ رتبه: {escape(str(rank))}."
                 )
             except TelegramError:
                 pass
@@ -229,10 +291,27 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         m = db.get_member(state["chat_id"], state["user_id"])
         body, markup = panel.member_card(state["chat_id"], m)
         await update.effective_message.reply_text(body, parse_mode="HTML", reply_markup=markup)
+    elif state["kind"] == "xp_reason":
+        result=db.award_admin_xp(state["chat_id"],state["user_id"],state["amount"],user.id,text[:200])
+        if not result:
+            await update.effective_message.reply_text("عضو پیدا نشد؛ ممکن است از دیتابیس حذف شده باشد."); return
+        await update.effective_message.reply_text(f"✅ XP تغییر کرد: {result['old_xp']:,} ← {result['xp']:,}\nلول: {result['old_level']} ← {result['level']}")
+        m=db.get_member(state["chat_id"],state["user_id"])
+        if m:
+            body,markup=panel.member_card(state["chat_id"],m)
+            await update.effective_message.reply_text(body,parse_mode="HTML",reply_markup=markup)
     elif state["kind"] == "reason":
         amount = state["amount"]
         value = db.change_bonus_points(state["chat_id"], state["user_id"], amount, user.id, text[:200])
         await update.effective_message.reply_text(f"✅ امتیاز ویژه به‌روزرسانی شد. موجودی فعلی: {value}")
+    elif state["kind"] == "xp_settings":
+        try:
+            values=[int(x) for x in text.split()]
+            if len(values)!=3 or not 1<=values[0]<=100 or not 5<=values[1]<=3600 or not 50<=values[2]<=10000: raise ValueError
+        except ValueError:
+            await update.effective_message.reply_text("فرمت نامعتبر است. سه عدد بفرست؛ مثال: 10 60 300. محدوده‌ها: XP=1..100، فاصله=5..3600، سقف روزانه=50..10000."); return
+        db.set_xp_settings(state["chat_id"],*values)
+        await update.effective_message.reply_text("✅ تنظیمات XP همین گروه ذخیره شد. XP و سابقه قبلی اعضا تغییر نکرد.")
     elif state["kind"] == "admin_level":
         try:
             level = int(text)
@@ -249,13 +328,11 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_text("هنوز گروهی ثبت نشده.")
             return
         chat_id = state["chat_id"]
-        members = db.get_members(chat_id, limit=100)
-        query = text.casefold().lstrip("@")
-        found = [m for m in members if query in (m["full_name"] or "").casefold() or query in (m["username"] or "").casefold() or query == str(m["user_id"])]
+        found = db.search_members(chat_id, text, limit=20)
         if not found:
-            await update.effective_message.reply_text("عضوی با این مشخصات در ۱۰۰ عضو اول پیدا نشد. از فهرست اعضا استفاده کن.")
+            await update.effective_message.reply_text("عضوی با این مشخصات پیدا نشد. نام، نام کاربری یا شناسه را بررسی کن.")
             return
-        rows = [[InlineKeyboardButton(f"👤 {m['full_name'][:30]}", callback_data=f"member:{chat_id}:{m['user_id']}")] for m in found[:20]]
+        rows = [[InlineKeyboardButton(f"👤 {escape(str(m['full_name'] or m['user_id']))[:30]}", callback_data=f"member:{chat_id}:{m['user_id']}")] for m in found[:20]]
         rows.append([InlineKeyboardButton("↩️ منوی اصلی", callback_data="home")])
         await update.effective_message.reply_text("نتایج جست‌وجو:", reply_markup=InlineKeyboardMarkup(rows))
 
@@ -275,9 +352,9 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Validate authorization for every callback that targets a specific group.
     # Callback data is user-editable in principle, so never trust a chat_id alone.
     group_scoped = {"group", "members", "member", "points", "title", "badges",
-                    "badge_toggle", "badge_clear", "history", "settings", "levelset",
+                    "badge_toggle", "badge_clear", "history", "settings", "levelset", "xp",
                     "announce", "search", "requests", "request_view",
-                    "request_reject", "request_approve"}
+                    "request_reject", "request_approve", "xpset", "audit"}
     prefix = data.split(":", 1)[0]
     if prefix in group_scoped:
         parts_for_auth = data.split(":")
@@ -312,7 +389,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             if action == "open":
                 await query.edit_message_text(
-                    f"💚 <b>{group['title']}</b>\n\n"
+                    f"💚 <b>{escape(str(group['title']))}</b>\n\n"
                     f"👥 اعضای ثبت‌شده: {db.member_count(chat_id)}\n"
                     f"🎯 لول درخواست ادمینی: {group['admin_level']}\n\nیک بخش را انتخاب کن:",
                     parse_mode="HTML",
@@ -358,6 +435,12 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
             body, markup = panel.member_card(chat_id, m)
             await query.edit_message_text(body, parse_mode="HTML", reply_markup=markup)
+            return
+        if data.startswith("xp:"):
+            _, chat_raw, target_raw, amount_raw = data.split(":")
+            chat_id, target_id, amount = int(chat_raw), int(target_raw), int(amount_raw)
+            pending_input[user.id] = {"kind":"xp_reason", "chat_id":chat_id, "user_id":target_id, "amount":amount}
+            await query.message.reply_text(f"برای تغییر {amount:+d} XP، دلیل را در یک پیام بفرست. تغییر با ثبت سابقه مدیریتی انجام می‌شود.")
             return
         if data.startswith("points:"):
             _, chat_raw, target_raw, amount_raw = data.split(":")
@@ -433,6 +516,10 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("⚙️ <b>تنظیمات گروه</b>", parse_mode="HTML",
                                           reply_markup=panel.settings_keyboard(chat_id, g["admin_level"], g["rankup_announcements"]))
             return
+        if data.startswith("xpset:"):
+            chat_id=int(data.split(":")[1]); pending_input[user.id]={"kind":"xp_settings","chat_id":chat_id}
+            await query.message.reply_text("تنظیمات را به شکل سه عدد بفرست: XP هر پیام، فاصله ثانیه‌ای، سقف XP روزانه. مثال: 10 60 300")
+            return
         if data.startswith("levelset:"):
             chat_id = int(data.split(":")[1])
             pending_input[user.id] = {"kind": "admin_level", "chat_id": chat_id}
@@ -459,7 +546,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             rows = []
             for r in requests[:30]:
                 m = db.get_member(chat_id, r["user_id"])
-                name = m["full_name"] if m else str(r["user_id"])
+                name = escape(str(m["full_name"] if m else r["user_id"]))
                 rows.append([InlineKeyboardButton(f"👤 {name[:25]} · تأیید/رد", callback_data=f"request_view:{chat_id}:{r['user_id']}")])
             rows.append([InlineKeyboardButton("↩️ منوی گروه", callback_data=f"group:{chat_id}:open")])
             await query.edit_message_text("🏆 <b>درخواست‌های ادمینی</b>", parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows))
@@ -468,7 +555,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             _, chat_raw, target_raw = data.split(":")
             chat_id, target_id = int(chat_raw), int(target_raw)
             m = db.get_member(chat_id, target_id)
-            name = m["full_name"] if m else str(target_id)
+            name = escape(str(m["full_name"] if m else target_id))
             await query.edit_message_text(f"درخواست ادمینی برای <b>{name}</b> · <code>{target_id}</code>", parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("✅ تأیید و ارتقا در تلگرام", callback_data=f"request_approve:{chat_id}:{target_id}")],
@@ -538,6 +625,9 @@ def main():
     app.add_handler(CommandHandler("rank", profile))
     app.add_handler(CommandHandler("top", top_command))
     app.add_handler(CommandHandler("rewards", rewards_command))
+    app.add_handler(CommandHandler("league", league_command))
+    app.add_handler(CommandHandler("missions", missions_command))
+    app.add_handler(CommandHandler("achievements", achievements_command))
     app.add_handler(CommandHandler("admin_request", admin_request))
     app.add_handler(CallbackQueryHandler(callback_handler))
     app.add_handler(MessageHandler(filters.ChatType.PRIVATE & filters.TEXT & ~filters.COMMAND, handle_text_input))
