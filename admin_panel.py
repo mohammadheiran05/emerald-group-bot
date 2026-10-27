@@ -114,9 +114,17 @@ def shop_admin_keyboard(chat_id, items):
 
 def shop_keyboard(chat_id, items, user_id):
     rows=[]
+    inventory = db.get_inventory(chat_id, user_id)
     for item in items[:30]:
-        owned = any(x["item_id"] == item["id"] for x in db.get_inventory(chat_id,user_id))
-        label = ("✅ " if owned else "🛒 ") + f"{item['emoji']} {item['name'][:20]} · {item['price']:,} XP"
-        rows.append([InlineKeyboardButton(label, callback_data=f"shopbuy:{chat_id}:{item['id']}")])
+        owned = any(x["item_id"] == item["id"] for x in inventory)
+        if owned:
+            rows.append([InlineKeyboardButton(f"✅ {item['emoji']} {item['name'][:22]} · خریداری‌شده", callback_data=f"shopowned:{chat_id}:{item['id']}")])
+        else:
+            price = int(item["price"])
+            rows.append([
+                InlineKeyboardButton(f"🛒 {price:,} XP", callback_data=f"shopbuy:{chat_id}:{item['id']}:xp"),
+                InlineKeyboardButton(f"⭐ {price:,} امتیاز", callback_data=f"shopbuy:{chat_id}:{item['id']}:points"),
+            ])
+            rows.append([InlineKeyboardButton(f"{item['emoji']} {item['name'][:25]}", callback_data=f"shopinfo:{chat_id}:{item['id']}")])
     rows.append([InlineKeyboardButton("🎒 کلکسیون من", callback_data=f"inventory:{chat_id}:{user_id}"), InlineKeyboardButton("✖️ بستن", callback_data="shopclose")])
     return InlineKeyboardMarkup(rows)

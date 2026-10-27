@@ -395,24 +395,44 @@ def delete_shop_item(chat_id: int, item_id: int):
         cur=conn.execute("DELETE FROM shop_items WHERE id=? AND chat_id=?",(item_id,chat_id))
         return cur.rowcount > 0
 
-def buy_shop_item(chat_id: int, user_id: int, item_id: int):
+def buy_shop_item(chat_id: int, user_id: int, item_id: int, currency: str = "xp"):
+    """Purchase a shop item with either XP eligibility or spendable special points.
+
+    XP is a level score and is never deducted. Special points (bonus_points) are
+    spendable and are deducted atomically when currency="points".
+    """
     now=int(time.time())
+    currency = (currency or "xp").lower()
+    if currency not in ("xp", "points"):
+        return {"ok":False,"reason":"bad_currency"}
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
         item=conn.execute("SELECT * FROM shop_items WHERE id=? AND chat_id=? AND active=1",(item_id,chat_id)).fetchone()
-        member=conn.execute("SELECT xp FROM members WHERE chat_id=? AND user_id=?",(chat_id,user_id)).fetchone()
+        member=conn.execute("SELECT xp,bonus_points FROM members WHERE chat_id=? AND user_id=?",(chat_id,user_id)).fetchone()
         if not item: return {"ok":False,"reason":"unavailable"}
         if not member: return {"ok":False,"reason":"member_missing"}
         owned=conn.execute("SELECT 1 FROM shop_inventory WHERE chat_id=? AND user_id=? AND item_id=?",(chat_id,user_id,item_id)).fetchone()
         if owned: return {"ok":False,"reason":"owned"}
-        balance=int(member["xp"]); price=int(item["price"])
-        if balance < price: return {"ok":False,"reason":"funds","balance":balance,"price":price}
-        new_balance=balance-price
-        conn.execute("UPDATE members SET xp=?,updated_at=? WHERE chat_id=? AND user_id=?",(new_balance,now,chat_id,user_id))
+        price=int(item["price"])
+        xp_balance=int(member["xp"])
+        points_balance=int(member["bonus_points"])
+        if currency == "points":
+            if points_balance < price:
+                return {"ok":False,"reason":"points_funds","balance":points_balance,"price":price,"currency":"points"}
+            new_points=points_balance-price
+            conn.execute("UPDATE members SET bonus_points=?,updated_at=? WHERE chat_id=? AND user_id=?",
+                         (new_points,now,chat_id,user_id))
+            conn.execute("INSERT INTO point_history(chat_id,user_id,actor_id,amount,reason,created_at) VALUES(?,?,?,?,?,?)",
+                         (chat_id,user_id,0,-price,f"خرید فروشگاه: {item['emoji']} {item['name']}",now))
+        else:
+            if xp_balance < price:
+                return {"ok":False,"reason":"funds","balance":xp_balance,"price":price,"currency":"xp"}
+            new_points=points_balance
+        # XP is a level score, not a spendable currency: never subtract it.
         conn.execute("INSERT INTO shop_inventory(chat_id,user_id,item_id,purchased_at) VALUES(?,?,?,?)",(chat_id,user_id,item_id,now))
         conn.execute("INSERT INTO xp_transactions(chat_id,user_id,amount,balance_after,kind,description,created_at) VALUES(?,?,?,?,?,?,?)",
-                     (chat_id,user_id,-price,new_balance,"shop_purchase",f"خرید {item['emoji']} {item['name']}",now))
-        return {"ok":True,"item":dict(item),"balance":new_balance}
+                     (chat_id,user_id,0,xp_balance,"shop_purchase",f"خرید {item['emoji']} {item['name']} با {'امتیاز ویژه' if currency == 'points' else 'XP بدون کسر'}",now))
+        return {"ok":True,"item":dict(item),"balance":xp_balance,"points_balance":new_points,"currency":currency}
 
 def get_inventory(chat_id: int, user_id: int):
     with _connect() as conn:

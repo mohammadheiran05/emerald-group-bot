@@ -4,7 +4,10 @@ from datetime import datetime, timezone
 import logging
 import time
 
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand,
+    BotCommandScopeAllGroupChats, BotCommandScopeAllPrivateChats, MenuButtonCommands,
+)
 from telegram.constants import ChatType
 from telegram.error import TelegramError
 from telegram.ext import (
@@ -23,6 +26,45 @@ logging.basicConfig(
 )
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logger = logging.getLogger("emerald_group_bot")
+
+# Telegram slash-command menus for groups and private chats.
+GROUP_COMMANDS = [
+    BotCommand("start", "فعال‌سازی و معرفی ربات"),
+    BotCommand("help", "راهنمای همه دستورها"),
+    BotCommand("me", "پروفایل، XP و لول من"),
+    BotCommand("rank", "رتبه و پیشرفت لول من"),
+    BotCommand("top", "۱۰ عضو برتر گروه"),
+    BotCommand("rewards", "راهنمای نشان‌ها و پاداش‌ها"),
+    BotCommand("league", "نمایش لیگ گروه"),
+    BotCommand("missions", "مأموریت‌های روزانه و هفتگی"),
+    BotCommand("shop", "فروشگاه خرید با XP"),
+    BotCommand("inventory", "کلکسیون و فعال‌سازی خریدها"),
+    BotCommand("transactions", "تاریخچه تغییرات XP"),
+    BotCommand("achievements", "دستاوردهای من"),
+    BotCommand("admin_request", "درخواست بررسی ادمینی"),
+    BotCommand("admin", "راهنمای پنل مدیریت"),
+]
+PRIVATE_COMMANDS = [
+    BotCommand("start", "شروع و معرفی ربات"),
+    BotCommand("help", "راهنمای دستورها"),
+    BotCommand("admin", "باز کردن پنل مدیریت گروه‌ها"),
+]
+
+async def setup_bot_commands(app: Application):
+    """Publish slash-command suggestions in Telegram group and private chats."""
+    try:
+        await app.bot.set_my_commands(
+            GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats()
+        )
+        await app.bot.set_my_commands(
+            PRIVATE_COMMANDS, scope=BotCommandScopeAllPrivateChats()
+        )
+        # Show Telegram's built-in command menu button in private chats.
+        await app.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+        logger.info("Telegram command menus configured for groups and private chats")
+    except TelegramError:
+        # A menu setup issue should be visible in logs, but must not crash the bot.
+        logger.exception("Could not configure Telegram command menus")
 
 # The owner can type a title or a custom point reason after choosing a button.
 pending_input = {}
@@ -267,7 +309,7 @@ async def inventory_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("🎒 کلکسیونت هنوز خالی است. برای دیدن فروشگاه /shop را بزن."); return
     rows=[]
     for item in inv[:30]:
-        rows.append([InlineKeyboardButton(f"{item['emoji']} {item['name'][:25]} · فعال‌سازی",callback_data=f"equip:{chat.id}:{item['id']}")])
+        rows.append([InlineKeyboardButton(f"{item['emoji']} {item['name'][:25]} · فعال‌سازی",callback_data=f"equip:{chat.id}:{item['item_id']}")])
     await update.effective_message.reply_text("🎒 <b>کلکسیون تو</b>\nروی محصولی بزن تا آن را در پروفایلت فعال کنی:",parse_mode="HTML",reply_markup=InlineKeyboardMarkup(rows))
 
 async def rewards_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -447,26 +489,50 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Member-facing shop actions: purchase is atomic and does not require admin rights.
     if data.startswith("shopbuy:"):
         try:
-            _, chat_raw, item_raw = data.split(":"); chat_id=int(chat_raw); item_id=int(item_raw)
-            result=db.buy_shop_item(chat_id,user.id,item_id)
+            parts=data.split(":")
+            _, chat_raw, item_raw = parts[:3]
+            currency = parts[3] if len(parts) > 3 else "xp"
+            chat_id=int(chat_raw); item_id=int(item_raw)
+            result=db.buy_shop_item(chat_id,user.id,item_id,currency)
             if not result["ok"]:
-                messages={"unavailable":"این محصول دیگر در دسترس نیست.","member_missing":"ابتدا در گروه چند پیام بفرست و دوباره تلاش کن.","owned":"این محصول را قبلاً خریده‌ای.","funds":f"XP کافی نداری. موجودی: {result.get('balance',0):,}؛ قیمت: {result.get('price',0):,}."}
-                await query.answer(messages.get(result.get("reason"),"خرید انجام نشد."),show_alert=True); return
+                reason=result.get("reason")
+                messages={
+                    "unavailable":"این محصول دیگر در دسترس نیست.",
+                    "member_missing":"ابتدا در گروه چند پیام بفرست و دوباره تلاش کن.",
+                    "owned":"این محصول را قبلاً خریده‌ای.",
+                    "funds":f"XP کافی نداری. موجودی: {result.get('balance',0):,}؛ قیمت: {result.get('price',0):,} XP.",
+                    "points_funds":f"امتیاز ویژه کافی نداری. موجودی: {result.get('balance',0):,}؛ قیمت: {result.get('price',0):,} ⭐.",
+                    "bad_currency":"روش پرداخت معتبر نیست.",
+                }
+                await query.answer(messages.get(reason,"خرید انجام نشد."),show_alert=True); return
             item=result["item"]
             await query.answer(f"خرید موفق! {item['emoji']} {item['name']}",show_alert=True)
-            items=db.get_shop_items(chat_id); m=db.get_member(chat_id,user.id)
-            await query.edit_message_text(f"💚 <b>فروشگاه زمرد</b>\nخریدت ثبت شد: {item['emoji']} <b>{escape(item['name'])}</b>\nموجودی جدید: <b>{result['balance']:,} XP</b>\nبرای فعال‌سازی محصول، کلکسیونت را باز کن.",parse_mode="HTML",reply_markup=panel.shop_keyboard(chat_id,items,user.id))
+            items=db.get_shop_items(chat_id)
+            await query.edit_message_text(
+                f"💚 <b>فروشگاه زمرد</b>\nخریدت ثبت شد: {item['emoji']} <b>{escape(item['name'])}</b>\n"
+                f"موجودی XP: <b>{result['balance']:,}</b> (بدون کسر)\n"
+                f"امتیاز ویژه: <b>{result['points_balance']:,} ⭐</b>\n"
+                "برای فعال‌سازی محصول، کلکسیونت را باز کن.",
+                parse_mode="HTML",reply_markup=panel.shop_keyboard(chat_id,items,user.id))
         except Exception as exc:
-            logger.exception("Shop purchase failed: %s",exc); await query.answer("خطا در خرید؛ XP کسر نشده مگر خرید ثبت شده باشد. دوباره بررسی کن.",show_alert=True)
+            logger.exception("Shop purchase failed: %s",exc); await query.answer("خطا در خرید؛ موجودی را بررسی کن و دوباره تلاش کن.",show_alert=True)
+        return
+    if data.startswith("shopowned:"):
+        await query.answer("این محصول را قبلاً خریده‌ای.",show_alert=True)
+        return
+    if data.startswith("shopinfo:"):
+        await query.answer("روش پرداخت را انتخاب کن: XP (بدون کسر) یا ⭐ امتیاز ویژه (از موجودی کم می‌شود).",show_alert=True)
         return
     if data.startswith("inventory:"):
         try:
             _,chat_raw,target_raw=data.split(":"); chat_id=int(chat_raw); target_id=int(target_raw)
             if target_id!=user.id: await query.answer("این کلکسیون متعلق به کاربر دیگری است.",show_alert=True); return
             inv=db.get_inventory(chat_id,user.id); rows=[]
-            for item in inv[:30]: rows.append([InlineKeyboardButton(f"{item['emoji']} {item['name'][:25]} · فعال‌سازی",callback_data=f"equip:{chat_id}:{item['id']}")])
+            for item in inv[:30]: rows.append([InlineKeyboardButton(f"{item['emoji']} {item['name'][:25]} · فعال‌سازی",callback_data=f"equip:{chat_id}:{item['item_id']}")])
             rows.append([InlineKeyboardButton("⬅️ بازگشت به فروشگاه",callback_data=f"shopopen:{chat_id}")])
-            await query.answer(); await query.edit_message_text("🎒 <b>کلکسیون تو</b>\nمحصولی را برای نمایش در پروفایل فعال کن:",parse_mode="HTML",reply_markup=InlineKeyboardMarkup(rows)); return
+            await query.answer()
+            body = "🎒 <b>کلکسیون تو</b>\nمحصولی را برای نمایش در پروفایل فعال کن:" if inv else "🎒 <b>کلکسیون تو خالی است.</b>\nاول از فروشگاه یک محصول بخر."
+            await query.edit_message_text(body,parse_mode="HTML",reply_markup=InlineKeyboardMarkup(rows)); return
         except Exception as exc:
             logger.exception("Inventory callback failed: %s",exc); await query.answer("کلکسیون در دسترس نیست.",show_alert=True); return
     if data.startswith("equip:"):
@@ -476,7 +542,7 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not result["ok"]: await query.answer("این محصول در کلکسیونت نیست.",show_alert=True); return
             await query.answer("در پروفایلت فعال شد!",show_alert=True)
             inv=db.get_inventory(chat_id,user.id); rows=[]
-            for item in inv[:30]: rows.append([InlineKeyboardButton(f"{item['emoji']} {item['name'][:25]} · فعال‌سازی",callback_data=f"equip:{chat_id}:{item['id']}")])
+            for item in inv[:30]: rows.append([InlineKeyboardButton(f"{item['emoji']} {item['name'][:25]} · فعال‌سازی",callback_data=f"equip:{chat_id}:{item['item_id']}")])
             await query.edit_message_text("🎒 <b>کلکسیون تو</b>\nمحصول انتخاب‌شده در پروفایلت فعال شد.",parse_mode="HTML",reply_markup=InlineKeyboardMarkup(rows or [[InlineKeyboardButton("🛍 فروشگاه",callback_data=f"shopopen:{chat_id}")]])); return
         except Exception as exc:
             logger.exception("Equip callback failed: %s",exc); await query.answer("فعال‌سازی انجام نشد.",show_alert=True); return
@@ -818,7 +884,7 @@ def main():
             print(f"- {err}")
         raise SystemExit(1)
     db.init_db()
-    app = Application.builder().token(BOT_TOKEN).build()
+    app = Application.builder().token(BOT_TOKEN).post_init(setup_bot_commands).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
     app.add_handler(CommandHandler("admin", admin_command))
