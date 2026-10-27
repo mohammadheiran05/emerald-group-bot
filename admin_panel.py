@@ -1,4 +1,5 @@
 import json
+from html import escape
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from levels import level_from_xp, rank_for_level, automatic_badges, next_level_progress
 import database as db
@@ -8,7 +9,7 @@ def main_menu():
         [InlineKeyboardButton("👥 مدیریت اعضا", callback_data="members:0"),
          InlineKeyboardButton("🏆 درخواست‌های ادمینی", callback_data="requests")],
         [InlineKeyboardButton("⚙️ تنظیمات گروه", callback_data="settings"),
-         InlineKeyboardButton("📊 راهنما", callback_data="help")],
+         InlineKeyboardButton("📊 داشبورد", callback_data="dashboard")],
     ])
 
 def group_picker(groups, action="open"):
@@ -20,8 +21,8 @@ def group_picker(groups, action="open"):
 def members_keyboard(chat_id, offset, members, total):
     rows = []
     for m in members:
-        name = (m["full_name"] or str(m["user_id"]))[:32]
-        rows.append([InlineKeyboardButton(f"👤 {name} · لول {level_from_xp(m['xp'])}", callback_data=f"member:{chat_id}:{m['user_id']}")])
+        name = escape((m["full_name"] or str(m["user_id"]))[:32])
+        rows.append([InlineKeyboardButton(f"👤 {name} · لول {level_from_xp(m['xp'], db.get_level_mode(chat_id), db.get_level_costs(chat_id))}", callback_data=f"member:{chat_id}:{m['user_id']}")])
     nav = []
     if offset > 0:
         nav.append(InlineKeyboardButton("⬅️ قبلی", callback_data=f"members:{chat_id}:{max(0, offset-10)}"))
@@ -34,28 +35,34 @@ def members_keyboard(chat_id, offset, members, total):
 
 def member_card(chat_id, member):
     xp = int(member["xp"])
-    level = level_from_xp(xp)
+    mode = db.get_level_mode(chat_id)
+    level = level_from_xp(xp, mode, db.get_level_costs(chat_id))
     rank_name, rank_icon = rank_for_level(level)
-    earned, required, pct = next_level_progress(xp, level)
-    custom_title = member["custom_title"] or "بدون لقب اختصاصی"
+    earned, required, pct = next_level_progress(xp, level, mode, db.get_level_costs(chat_id))
+    custom_title = escape(str(member["custom_title"] or "بدون لقب اختصاصی"))
     try:
         custom_badges = json.loads(member["custom_badges"] or "[]")
     except json.JSONDecodeError:
         custom_badges = []
     auto = automatic_badges(level)
-    badge_text = " ".join(f"{b.get('emoji','🏅')} {b.get('name','نشان')}" for b in auto + custom_badges)
+    badge_text = escape(" ".join(f"{b.get('emoji','🏅')} {b.get('name','نشان')}" for b in auto + custom_badges))
     if not badge_text:
         badge_text = "هنوز نشانی ندارد"
     text = (
-        f"👤 <b>{member['full_name']}</b>\n"
+        f"👤 <b>{escape(str(member['full_name'] or member['user_id']))}</b>\n"
         f"🆔 <code>{member['user_id']}</code>\n"
         f"{rank_icon} لول: <b>{level}/100 · {rank_name}</b>\n"
         f"✨ XP: <b>{xp:,}</b>  |  پیشرفت لول: {pct}% ({earned}/{required})\n"
         f"⭐ امتیاز ویژه: <b>{member['bonus_points']:,}</b>\n"
         f"🏷 لقب: <b>{custom_title}</b>\n"
-        f"🎖 نشان‌ها: {badge_text}"
+        f"🛍 لقب فروشگاه: <b>{escape(str(member.get('active_shop_title') or 'ندارد'))}</b>\n"
+        f"🎖 نشان‌ها: {badge_text}\n"
+        f"🛍 نشان فعال: <b>{escape(str(member.get('active_shop_badge') or 'ندارد'))}</b>\n"
+        f"🖼 قاب پروفایل: <b>{escape(str(member.get('active_shop_frame') or 'ندارد'))}</b>"
     )
     kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("+100 XP", callback_data=f"xp:{chat_id}:{member['user_id']}:100"),
+         InlineKeyboardButton("−100 XP", callback_data=f"xp:{chat_id}:{member['user_id']}:-100")],
         [InlineKeyboardButton("+10 ⭐", callback_data=f"points:{chat_id}:{member['user_id']}:10"),
          InlineKeyboardButton("+50 ⭐", callback_data=f"points:{chat_id}:{member['user_id']}:50"),
          InlineKeyboardButton("+100 ⭐", callback_data=f"points:{chat_id}:{member['user_id']}:100")],
@@ -63,8 +70,9 @@ def member_card(chat_id, member):
          InlineKeyboardButton("−50 ⭐", callback_data=f"points:{chat_id}:{member['user_id']}:-50")],
         [InlineKeyboardButton("🏷 تعیین لقب", callback_data=f"title:{chat_id}:{member['user_id']}")],
         [InlineKeyboardButton("🎖 اختصاص نشان", callback_data=f"badges:{chat_id}:{member['user_id']}")],
-        [InlineKeyboardButton("📜 تاریخچه امتیاز", callback_data=f"history:{chat_id}:{member['user_id']}")],
-        [InlineKeyboardButton("⬅️ فهرست اعضا", callback_data="members:0"),
+        [InlineKeyboardButton("📜 تاریخچه امتیاز ویژه", callback_data=f"history:{chat_id}:{member['user_id']}")],
+        [InlineKeyboardButton("🧾 تاریخچه XP", callback_data=f"xphistory:{chat_id}:{member['user_id']}")],
+        [InlineKeyboardButton("⬅️ فهرست اعضا", callback_data=f"members:{chat_id}:0"),
          InlineKeyboardButton("🏠 منوی اصلی", callback_data="home")],
     ])
     return text, kb
@@ -87,5 +95,28 @@ def settings_keyboard(chat_id, admin_level, announcements):
         [InlineKeyboardButton(f"🎯 لول ادمینی: {admin_level}", callback_data=f"levelset:{chat_id}")],
         [InlineKeyboardButton("🔔 پیام ارتقای لول: روشن" if announcements else "🔕 پیام ارتقای لول: خاموش",
                               callback_data=f"announce:{chat_id}")],
-        [InlineKeyboardButton("↩️ منوی اصلی", callback_data="home")],
+        [InlineKeyboardButton("🛡️ تنظیمات XP و ضداسپم", callback_data=f"xpset:{chat_id}")],
+        [InlineKeyboardButton("📈 سیستم لول‌بندی", callback_data=f"levelmode:{chat_id}")],
+        [InlineKeyboardButton("🎯 تنظیم مأموریت‌ها", callback_data=f"missionset:{chat_id}")],
+        [InlineKeyboardButton("🛍 مدیریت فروشگاه", callback_data=f"shopadmin:{chat_id}")],
+        [InlineKeyboardButton("↩️ منوی گروه", callback_data=f"group:{chat_id}:open")],
     ])
+
+
+def shop_admin_keyboard(chat_id, items):
+    rows = [[InlineKeyboardButton("➕ افزودن محصول", callback_data=f"shopadd:{chat_id}")]]
+    for item in items[:25]:
+        status = "🟢" if item["active"] else "⚪"
+        rows.append([InlineKeyboardButton(f"{status} {item['emoji']} {item['name'][:18]} · {item['price']:,} XP", callback_data=f"shoptoggle:{chat_id}:{item['id']}")])
+        rows.append([InlineKeyboardButton("💰 تغییر قیمت", callback_data=f"shopprice:{chat_id}:{item['id']}")])
+    rows.append([InlineKeyboardButton("↩️ تنظیمات گروه", callback_data=f"settings:{chat_id}")])
+    return InlineKeyboardMarkup(rows)
+
+def shop_keyboard(chat_id, items, user_id):
+    rows=[]
+    for item in items[:30]:
+        owned = any(x["item_id"] == item["id"] for x in db.get_inventory(chat_id,user_id))
+        label = ("✅ " if owned else "🛒 ") + f"{item['emoji']} {item['name'][:20]} · {item['price']:,} XP"
+        rows.append([InlineKeyboardButton(label, callback_data=f"shopbuy:{chat_id}:{item['id']}")])
+    rows.append([InlineKeyboardButton("🎒 کلکسیون من", callback_data=f"inventory:{chat_id}:{user_id}"), InlineKeyboardButton("✖️ بستن", callback_data="shopclose")])
+    return InlineKeyboardMarkup(rows)
