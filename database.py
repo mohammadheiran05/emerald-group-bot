@@ -88,6 +88,7 @@ def init_db():
             name TEXT NOT NULL,
             emoji TEXT NOT NULL DEFAULT '🎁',
             price INTEGER NOT NULL CHECK(price >= 0),
+            points_price INTEGER NOT NULL DEFAULT 0 CHECK(points_price >= 0),
             active INTEGER NOT NULL DEFAULT 1,
             created_by INTEGER NOT NULL DEFAULT 0,
             created_at INTEGER NOT NULL,
@@ -119,11 +120,14 @@ def init_db():
         for table, columns in {
             "groups": {"xp_per_message": "INTEGER NOT NULL DEFAULT 10", "xp_cooldown_seconds": "INTEGER NOT NULL DEFAULT 60", "daily_xp_cap": "INTEGER NOT NULL DEFAULT 300", "level_mode": "TEXT NOT NULL DEFAULT 'normal'", "level_costs": "TEXT NOT NULL DEFAULT '{}'", "daily_mission_target": "INTEGER NOT NULL DEFAULT 100", "daily_mission_reward": "INTEGER NOT NULL DEFAULT 25", "weekly_mission_target": "INTEGER NOT NULL DEFAULT 500", "weekly_mission_reward": "INTEGER NOT NULL DEFAULT 100", "daily_message_target": "INTEGER NOT NULL DEFAULT 20", "daily_message_reward": "INTEGER NOT NULL DEFAULT 20"},
             "members": {"xp_day": "TEXT NOT NULL DEFAULT ''", "xp_today": "INTEGER NOT NULL DEFAULT 0", "xp_week_key": "TEXT NOT NULL DEFAULT ''", "xp_week": "INTEGER NOT NULL DEFAULT 0", "messages_day": "TEXT NOT NULL DEFAULT ''", "messages_today": "INTEGER NOT NULL DEFAULT 0", "last_message_hash": "TEXT NOT NULL DEFAULT ''", "last_message_hash_at": "INTEGER NOT NULL DEFAULT 0", "active_shop_title": "TEXT NOT NULL DEFAULT ''", "active_shop_badge": "TEXT NOT NULL DEFAULT ''", "active_shop_frame": "TEXT NOT NULL DEFAULT ''"},
+            "shop_items": {"points_price": "INTEGER NOT NULL DEFAULT 0"},
         }.items():
             present = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
             for col, definition in columns.items():
                 if col not in present:
                     conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} {definition}")
+                    if table == "shop_items" and col == "points_price":
+                        conn.execute("UPDATE shop_items SET points_price=price")
 
 def register_group(chat_id: int, title: str):
     now = int(time.time())
@@ -139,8 +143,8 @@ def register_group(chat_id: int, title: str):
             starter=[("title","عضو فعال","🏷️",250),("title","زمردی","💚",800),
                      ("badge","ستاره‌دار","🌟",400),("badge","قهرمان","🏆",1200),
                      ("frame","قاب زمردی","💚",600),("frame","قاب افسانه‌ای","👑",1500)]
-            conn.executemany("INSERT OR IGNORE INTO shop_items(chat_id,item_type,name,emoji,price,active,created_by,created_at) VALUES(?,?,?,?,?,1,0,?)",
-                             [(chat_id,kind,name,emoji,price,now) for kind,name,emoji,price in starter])
+            conn.executemany("INSERT OR IGNORE INTO shop_items(chat_id,item_type,name,emoji,price,points_price,active,created_by,created_at) VALUES(?,?,?,?,?,?,1,0,?)",
+                             [(chat_id,kind,name,emoji,price,price,now) for kind,name,emoji,price in starter])
 
 def get_groups():
     with _connect() as conn:
@@ -372,13 +376,14 @@ def get_shop_items(chat_id: int, active_only=True):
         sql="SELECT * FROM shop_items WHERE chat_id=?" + (" AND active=1" if active_only else "") + " ORDER BY price,id"
         return [dict(r) for r in conn.execute(sql,(chat_id,))]
 
-def add_shop_item(chat_id: int, item_type: str, name: str, emoji: str, price: int, actor_id: int):
+def add_shop_item(chat_id: int, item_type: str, name: str, emoji: str, price: int, actor_id: int, points_price=None):
     if item_type not in ("title","badge","frame"): raise ValueError("نوع محصول نامعتبر است")
     name=(name or "").strip()[:50]; emoji=(emoji or "🎁").strip()[:8]; price=int(price)
-    if not name or price < 0 or price > 10_000_000: raise ValueError("نام یا قیمت نامعتبر است")
+    points_price = price if points_price is None else int(points_price)
+    if not name or not 0 <= price <= 10_000_000 or not 0 <= points_price <= 10_000_000: raise ValueError("نام یا قیمت نامعتبر است")
     with _connect() as conn:
-        cur=conn.execute("INSERT INTO shop_items(chat_id,item_type,name,emoji,price,active,created_by,created_at) VALUES(?,?,?,?,?,1,?,?)",
-                         (chat_id,item_type,name,emoji,price,actor_id,int(time.time())))
+        cur=conn.execute("INSERT INTO shop_items(chat_id,item_type,name,emoji,price,points_price,active,created_by,created_at) VALUES(?,?,?,?,?,?,1,?,?)",
+                         (chat_id,item_type,name,emoji,price,points_price,actor_id,int(time.time())))
         return int(cur.lastrowid)
 
 def toggle_shop_item(chat_id: int, item_id: int):
@@ -413,7 +418,7 @@ def buy_shop_item(chat_id: int, user_id: int, item_id: int, currency: str = "xp"
         if not member: return {"ok":False,"reason":"member_missing"}
         owned=conn.execute("SELECT 1 FROM shop_inventory WHERE chat_id=? AND user_id=? AND item_id=?",(chat_id,user_id,item_id)).fetchone()
         if owned: return {"ok":False,"reason":"owned"}
-        price=int(item["price"])
+        price=int(item["points_price"] if currency == "points" else item["price"])
         xp_balance=int(member["xp"])
         points_balance=int(member["bonus_points"])
         if currency == "points":
@@ -461,8 +466,11 @@ def group_dashboard(chat_id: int):
         return {"members":int(total),"xp_total":int(xp_total),"active_7d":int(active_7d),"shop_items":int(items),"purchases":int(purchases)}
 
 
-def update_shop_item_price(chat_id: int, item_id: int, price: int):
-    price=max(0,min(10000000,int(price)))
+def update_shop_item_price(chat_id: int, item_id: int, price: int, currency: str = "xp"):
+    price=int(price)
+    if price < 0 or price > 10_000_000 or currency not in ("xp", "points"):
+        return False
+    column = "points_price" if currency == "points" else "price"
     with _connect() as conn:
-        cur=conn.execute("UPDATE shop_items SET price=? WHERE id=? AND chat_id=?",(price,item_id,chat_id))
+        cur=conn.execute(f"UPDATE shop_items SET {column}=? WHERE id=? AND chat_id=?",(price,item_id,chat_id))
         return cur.rowcount > 0

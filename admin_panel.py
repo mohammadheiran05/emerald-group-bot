@@ -107,8 +107,11 @@ def shop_admin_keyboard(chat_id, items):
     rows = [[InlineKeyboardButton("➕ افزودن محصول", callback_data=f"shopadd:{chat_id}")]]
     for item in items[:25]:
         status = "🟢" if item["active"] else "⚪"
-        rows.append([InlineKeyboardButton(f"{status} {item['emoji']} {item['name'][:18]} · {item['price']:,} XP", callback_data=f"shoptoggle:{chat_id}:{item['id']}")])
-        rows.append([InlineKeyboardButton("💰 تغییر قیمت", callback_data=f"shopprice:{chat_id}:{item['id']}")])
+        xp_price = int(item["price"])
+        points_price = int(item.get("points_price", xp_price))
+        rows.append([InlineKeyboardButton(f"{status} {item['emoji']} {item['name'][:15]} · {xp_price:,} XP | ⭐ {points_price:,}", callback_data=f"shoptoggle:{chat_id}:{item['id']}")])
+        rows.append([InlineKeyboardButton("💰 تغییر قیمت XP", callback_data=f"shopprice:{chat_id}:{item['id']}:xp"),
+                     InlineKeyboardButton("⭐ تغییر قیمت امتیاز", callback_data=f"shopprice:{chat_id}:{item['id']}:points")])
     rows.append([InlineKeyboardButton("↩️ تنظیمات گروه", callback_data=f"settings:{chat_id}")])
     return InlineKeyboardMarkup(rows)
 
@@ -120,10 +123,11 @@ def shop_keyboard(chat_id, items, user_id):
         if owned:
             rows.append([InlineKeyboardButton(f"✅ {item['emoji']} {item['name'][:22]} · خریداری‌شده", callback_data=f"shopowned:{chat_id}:{item['id']}")])
         else:
-            price = int(item["price"])
+            xp_price = int(item["price"])
+            points_price = int(item.get("points_price", xp_price))
             rows.append([
-                InlineKeyboardButton(f"🛒 {price:,} XP", callback_data=f"shopbuy:{chat_id}:{item['id']}:xp"),
-                InlineKeyboardButton(f"⭐ {price:,} امتیاز", callback_data=f"shopbuy:{chat_id}:{item['id']}:points"),
+                InlineKeyboardButton(f"🛒 {xp_price:,} XP", callback_data=f"shopbuy:{chat_id}:{item['id']}:xp"),
+                InlineKeyboardButton(f"⭐ {points_price:,} امتیاز", callback_data=f"shopbuy:{chat_id}:{item['id']}:points"),
             ])
             rows.append([InlineKeyboardButton(f"{item['emoji']} {item['name'][:25]}", callback_data=f"shopinfo:{chat_id}:{item['id']}")])
     rows.append([InlineKeyboardButton("🎒 کلکسیون من", callback_data=f"inventory:{chat_id}:{user_id}"), InlineKeyboardButton("✖️ بستن", callback_data="shopclose")])

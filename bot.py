@@ -423,24 +423,33 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
         try:
             price=int(text)
             if not 0<=price<=10000000: raise ValueError
-            ok=db.update_shop_item_price(state["chat_id"],state["item_id"],price)
-            await update.effective_message.reply_text("✅ قیمت محصول به‌روزرسانی شد." if ok else "محصول پیدا نشد.")
+            currency=state.get("currency", "xp")
+            ok=db.update_shop_item_price(state["chat_id"],state["item_id"],price,currency)
+            label = "امتیاز ویژه ⭐" if currency == "points" else "XP"
+            await update.effective_message.reply_text(f"✅ قیمت محصول با {label} به‌روزرسانی شد." if ok else "محصول پیدا نشد.")
         except ValueError:
             pending_input[user.id]=state
             await update.effective_message.reply_text("قیمت باید عدد صحیح بین ۰ تا ۱۰٬۰۰۰٬۰۰۰ باشد. دوباره بفرست.")
     elif state["kind"] == "shop_add":
         try:
             parts=[x.strip() for x in text.split("|")]
-            if len(parts)!=4: raise ValueError
-            name,kind,price_raw,emoji=parts; kind_map={"لقب":"title","title":"title","نشان":"badge","badge":"badge","قاب":"frame","frame":"frame"}
+            if len(parts) not in (4,5): raise ValueError
+            name,kind,price_raw=parts[:3]
+            if len(parts)==5:
+                points_raw,emoji=parts[3],parts[4]
+                points_price=int(points_raw)
+            else:
+                emoji=parts[3]
+                points_price=None
+            kind_map={"لقب":"title","title":"title","نشان":"badge","badge":"badge","قاب":"frame","frame":"frame"}
             item_type=kind_map.get(kind.lower()); price=int(price_raw)
-            if not item_type or not name or not 0<=price<=10000000: raise ValueError
-            item_id=db.add_shop_item(state["chat_id"],item_type,name,emoji or "🎁",price,user.id)
-            await update.effective_message.reply_text(f"✅ محصول #{item_id} به فروشگاه این گروه اضافه شد.")
+            if not item_type or not name or not 0<=price<=10000000 or (points_price is not None and not 0<=points_price<=10000000): raise ValueError
+            item_id=db.add_shop_item(state["chat_id"],item_type,name,emoji or "🎁",price,user.id,points_price)
+            await update.effective_message.reply_text(f"✅ محصول #{item_id} اضافه شد. قیمت XP: {price:,}؛ قیمت امتیاز ویژه: {(price if points_price is None else points_price):,} ⭐")
         except (ValueError, Exception) as exc:
             logger.info("Shop item creation rejected: %s",exc)
             pending_input[user.id]=state
-            await update.effective_message.reply_text("فرمت درست نیست یا این نام از قبل وجود دارد. این‌طور بفرست: نام محصول | نوع (لقب/نشان/قاب) | قیمت XP | ایموجی\nمثال: لقب زمردی | لقب | 500 | 💚")
+            await update.effective_message.reply_text("فرمت: نام محصول | نوع (لقب/نشان/قاب) | قیمت XP | قیمت امتیاز ویژه | ایموجی\nمثال: لقب زمردی | لقب | 500 | 250 | 💚\nبرای قیمت یکسان می‌توانی قالب قدیمی چهارقسمتی را هم بفرستی.")
     elif state["kind"] == "level_costs":
         try:
             costs={}
@@ -765,12 +774,15 @@ async def callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("🛍 <b>مدیریت فروشگاه گروه</b>\nروی محصول بزن تا فعال/غیرفعال شود. افزودن محصول با قالب ساده انجام می‌شود. محصولات و خریدها بین گروه‌ها جدا هستند.",parse_mode="HTML",reply_markup=panel.shop_admin_keyboard(chat_id,items)); return
         if data.startswith("shopadd:"):
             chat_id=int(data.split(":")[1]); pending_input[user.id]={"kind":"shop_add","chat_id":chat_id}
-            await query.message.reply_text("نام محصول | نوع (لقب/نشان/قاب) | قیمت XP | ایموجی\nمثال: لقب زمردی | لقب | 500 | 💚\nقیمت باید عدد صحیح باشد؛ نام محصول در همان گروه یکتا است.")
+            await query.message.reply_text("نام محصول | نوع (لقب/نشان/قاب) | قیمت XP | قیمت امتیاز ویژه | ایموجی\nمثال: لقب زمردی | لقب | 500 | 250 | 💚\nقیمت هر روش پرداخت جداگانه است. برای قیمت یکسان هم می‌توانی چهار بخش بفرستی: نام | نوع | قیمت XP | ایموجی.")
             return
         if data.startswith("shopprice:"):
-            _,chat_raw,item_raw=data.split(":"); chat_id=int(chat_raw); item_id=int(item_raw)
-            pending_input[user.id]={"kind":"shop_price","chat_id":chat_id,"item_id":item_id}
-            await query.message.reply_text("قیمت جدید محصول را فقط به شکل عدد بفرست (۰ تا ۱۰٬۰۰۰٬۰۰۰ XP).")
+            parts=data.split(":"); chat_id=int(parts[1]); item_id=int(parts[2]); currency=parts[3] if len(parts)>3 else "xp"
+            if currency not in ("xp", "points"):
+                await query.answer("نوع قیمت نامعتبر است.", show_alert=True); return
+            pending_input[user.id]={"kind":"shop_price","chat_id":chat_id,"item_id":item_id,"currency":currency}
+            label = "امتیاز ویژه ⭐" if currency == "points" else "XP"
+            await query.message.reply_text(f"قیمت جدید محصول با {label} را فقط به شکل عدد بفرست (۰ تا ۱۰٬۰۰۰٬۰۰۰).")
             return
         if data.startswith("shoptoggle:"):
             _,chat_raw,item_raw=data.split(":"); chat_id=int(chat_raw); item_id=int(item_raw); active=db.toggle_shop_item(chat_id,item_id)
