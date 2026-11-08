@@ -9,6 +9,7 @@ DATABASE_PATH = os.getenv("DATABASE_PATH", "data/group_bot.db").strip()
 XP_PER_MESSAGE = max(1, int(os.getenv("XP_PER_MESSAGE", "10")))
 XP_COOLDOWN_SECONDS = max(0, int(os.getenv("XP_COOLDOWN_SECONDS", "60")))
 DEFAULT_ADMIN_LEVEL = min(100, max(1, int(os.getenv("ADMIN_LEVEL", "70"))))
+MINI_APP_URL = os.getenv("MINI_APP_URL", "").strip().rstrip("/")
 
 try:
     OWNER_ID = int(OWNER_ID_RAW)
@@ -21,4 +22,6 @@ def validate_config():
         errors.append("BOT_TOKEN را در فایل .env وارد کن.")
     if OWNER_ID <= 0:
         errors.append("OWNER_ID باید شناسه عددی تلگرام خودت باشد.")
+    if MINI_APP_URL and not MINI_APP_URL.startswith("https://"):
+        errors.append("MINI_APP_URL باید با https:// شروع شود.")
     return errors

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#071c17">
+  <title>Emerald Games</title>
+  <script src="https://telegram.org/js/telegram-web-app.js?64"></script>
+  <style>
+    :root{color-scheme:dark;--bg:#071c17;--panel:#0d2922;--panel2:#12372d;--line:#245346;--green:#43d3a0;--green2:#1e9c70;--text:#effbf6;--muted:#9bb8ad;--gold:#e6c77a;--danger:#ed7777;--radius:18px}
+    *{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -20%,#174a39 0%,var(--bg) 55%);color:var(--text);font-family:Tahoma,Arial,sans-serif;min-height:100vh;padding:calc(14px + env(safe-area-inset-top)) 14px calc(22px + env(safe-area-inset-bottom));}
+    button{font:inherit;cursor:pointer;border:0}button:disabled{opacity:.5;cursor:not-allowed}.wrap{max-width:560px;margin:auto}.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}.brand{display:flex;align-items:center;gap:10px}.logo{width:42px;height:42px;border-radius:14px;background:linear-gradient(145deg,#45d5a0,#126b4c);display:grid;place-items:center;color:#062319;font-size:23px;box-shadow:0 8px 24px #1e9c7040}.brand h1{font-size:17px;margin:0;letter-spacing:.4px}.brand p{font-size:11px;color:var(--muted);margin:4px 0 0}.pill{border:1px solid var(--line);background:#0d2922;border-radius:999px;padding:8px 11px;font-size:12px;color:var(--green);white-space:nowrap}
+    .profile{background:linear-gradient(120deg,#123d30,#0d2922);border:1px solid #28614e;border-radius:var(--radius);padding:15px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;gap:12px}.profile strong{font-size:14px}.profile small{display:block;color:var(--muted);margin-top:5px}.level{text-align:left;min-width:80px}.level b{font-size:25px;color:var(--green)}.level small{margin:0;color:var(--muted)}
+    .section-head{display:flex;align-items:center;justify-content:space-between;margin:18px 2px 10px}.section-head h2{font-size:15px;margin:0}.section-head span{font-size:11px;color:var(--muted)}.games{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.game{background:linear-gradient(160deg,#12372d,#0b241e);border:1px solid var(--line);border-radius:17px;padding:14px;text-align:right;color:var(--text);min-height:132px;transition:transform .15s,border-color .15s}.game:active{transform:scale(.98)}.game:hover{border-color:var(--green2)}.game .emoji{font-size:27px;display:block;margin-bottom:8px}.game strong{font-size:14px;display:block}.game small{display:block;color:var(--muted);font-size:11px;line-height:1.7;margin-top:5px}.game .best{color:var(--gold);font-size:10px;margin-top:7px}
+    .panel{background:#0b241e;border:1px solid var(--line);border-radius:var(--radius);padding:15px;margin-top:12px}.tabs{display:flex;gap:7px;overflow:auto;padding-bottom:2px}.tab{background:#102f26;border:1px solid var(--line);color:var(--muted);padding:8px 11px;border-radius:999px;font-size:11px;white-space:nowrap}.tab.active{background:#1a6048;color:#fff;border-color:#3bba8b}.leader-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid #1b4035;font-size:12px}.leader-row:last-child{border:0}.rank{width:25px;color:var(--gold);font-weight:bold}.leader-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.leader-score{color:var(--green);font-weight:bold;white-space:nowrap}.muted{color:var(--muted);font-size:12px;line-height:1.8}.notice{border:1px solid #725d2d;background:#342b16;color:#f3d991;padding:10px 12px;border-radius:12px;font-size:11px;line-height:1.8;margin:12px 0}
+    .screen{display:none}.screen.active{display:block}.back{background:transparent;color:var(--muted);padding:7px 0;margin-bottom:8px;font-size:12px}.game-title{font-size:18px;margin:4px 0}.game-sub{font-size:11px;color:var(--muted);margin:0 0 14px}.primary{background:linear-gradient(120deg,#45d5a0,#1b9b70);color:#05261b;border-radius:13px;padding:12px 18px;font-weight:bold;width:100%;margin-top:12px}.secondary{background:#163d30;color:var(--text);border:1px solid var(--line);border-radius:12px;padding:10px 13px}.play-area{min-height:250px;display:grid;place-items:center;background:#061812;border:1px solid #1e4b3b;border-radius:16px;padding:12px;overflow:hidden}.game-canvas{width:min(100%,320px);aspect-ratio:1;background:#0a2119;border:1px solid #245346;border-radius:10px;touch-action:none}.memory-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;width:min(100%,330px)}.memory-card{aspect-ratio:1;border-radius:10px;background:#164333;border:1px solid #28634e;color:var(--green);font-size:25px}.memory-card.open,.memory-card.matched{background:#245a45;color:white}.ttt{display:grid;grid-template-columns:repeat(3,1fr);gap:7px;width:min(100%,290px)}.ttt button{aspect-ratio:1;background:#12372b;border:1px solid #2a614e;border-radius:12px;color:var(--green);font-size:34px}.reaction{width:100%;min-height:210px;border-radius:14px;background:#18372d;color:#effbf6;font-size:20px;font-weight:bold}.reaction.ready{background:#187d58}.reaction.fail{background:#713b3b}.statsline{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:11px;margin:12px 2px}.actions{display:flex;gap:8px}.actions>*{flex:1}
+    @media(max-width:360px){body{padding-left:10px;padding-right:10px}.game{padding:11px;min-height:125px}.brand h1{font-size:15px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top"><div class="brand"><div class="logo">✦</div><div><h1>EMERALD GAMES</h1><p>بازی‌های سبک گروه زمرد</p></div></div><div class="pill" id="status">در حال اتصال…</div></header>
+  <section class="profile"><div><strong id="playerName">بازیکن</strong><small>XP بازی: <span id="playerXp">۰</span> · مستقل از XP گروه</small></div><div class="level"><b id="playerLevel">1</b><small>LEVEL</small></div></section>
+  <main id="homeScreen" class="screen active">
+    <div class="section-head"><h2>انتخاب بازی</h2><span>۴ بازی سبک</span></div>
+    <div class="games">
+      <button class="game" data-game="snake"><span class="emoji">🐍</span><strong>مار کلاسیک</strong><small>رکورد طولانی‌تر، امتیاز بیشتر</small><span class="best" id="best-snake">بهترین رکورد: —</span></button>
+      <button class="game" data-game="memory"><span class="emoji">🧠</span><strong>حافظه</strong><small>جفت کارت‌ها را با حرکت کمتر پیدا کن</small><span class="best" id="best-memory">بهترین رکورد: —</span></button>
+      <button class="game" data-game="tictactoe"><span class="emoji">⭕</span><strong>دوز</strong><small>در برابر رقیب هوشمند بازی کن</small><span class="best" id="best-tictactoe">بهترین رکورد: —</span></button>
+      <button class="game" data-game="reaction"><span class="emoji">⚡</span><strong>سرعت واکنش</strong><small>به‌محض سبزشدن صفحه لمس کن</small><span class="best" id="best-reaction">بهترین رکورد: —</span></button>
+    </div>
+    <div class="section-head"><h2>رتبه‌بندی بازی‌ها</h2><span>ویژه همین گروه</span></div>
+    <section class="panel"><div class="tabs" id="boardTabs"></div><div id="leaderboard" class="muted" style="margin-top:10px">برای دیدن رتبه‌ها در حال دریافت اطلاعات…</div></section>
+    <div class="notice" id="authNotice" hidden>برای ثبت رکورد باید بازی را از دکمه داخل تلگرام و در گروه اجرا کنی. بازکردن مستقیم لینک در مرورگر، هویت تلگرامی معتبر ندارد.</div>
+  </main>
+  <main id="gameScreen" class="screen">
+    <button class="back" id="backBtn">← بازگشت به بازی‌ها</button>
+    <h2 class="game-title" id="gameTitle">بازی</h2><p class="game-sub" id="gameDescription"></p>
+    <div class="statsline"><span id="gameStat">آماده‌ای؟</span><span id="gameBest">رکورد: —</span></div>
+    <div class="play-area" id="playArea"></div>
+    <div class="actions"><button class="secondary" id="restartBtn">شروع دوباره</button><button class="secondary" id="boardBtn">رتبه‌بندی</button></div>
+    <div id="result" class="muted" style="margin-top:10px;text-align:center"></div>
+  </main>
+</div>
+<script>
+(() => {
+  const tg = window.Telegram?.WebApp;
+  if (tg) { tg.ready(); tg.expand(); tg.setHeaderColor?.('#071c17'); tg.setBackgroundColor?.('#071c17'); }
+  const $ = id => document.getElementById(id);
+  const initData = tg?.initData || '';
+  const games = {
+    snake:{title:'مار کلاسیک',desc:'با خوردن نقطه‌ها رشد کن و به دیواره یا خودت برخورد نکن.',best:'best_snake'},
+    memory:{title:'حافظه',desc:'کارت‌های هم‌شکل را پیدا کن؛ حرکت کمتر یعنی رکورد بهتر.',best:'best_memory'},
+    tictactoe:{title:'دوز',desc:'سه علامت پشت سر هم بساز و رقیب را شکست بده.',best:'best_tictactoe'},
+    reaction:{title:'سرعت واکنش',desc:'منتظر سبزشدن صفحه بمان؛ زودتر از آن لمس نکنی.',best:'best_reaction_ms'}
+  };
+  let data=null, currentGame='', session='', gameSeed=1, gameStarted=0, timer=null, boardGame='snake', reactionTimer=null, reactionReady=false, reactionStart=0, cleanupGame=null;
+  const fmt = n => Number(n||0).toLocaleString('fa-IR');
+  async function api(path, body={}) {
+    if (!initData) throw new Error('no_telegram_auth');
+    const res=await fetch(path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,init_data:initData})});
+    const json=await res.json(); if(!res.ok || !json.ok) throw new Error(json.error||'request_failed'); return json;
+  }
+  function setStatus(t){$('status').textContent=t;}
+  function showHome(){clearInterval(timer);clearInterval(reactionTimer);if(cleanupGame){cleanupGame();cleanupGame=null;}$('gameScreen').classList.remove('active');$('homeScreen').classList.add('active');currentGame='';}
+  function showGame(key){currentGame=key;$('homeScreen').classList.remove('active');$('gameScreen').classList.add('active');$('gameTitle').textContent=games[key].title;$('gameDescription').textContent=games[key].desc;$('gameBest').textContent='رکورد: '+bestLabel(key);$('result').textContent='';startGame(key);}
+  function bestLabel(key){if(!data)return '—';let v=data.profile[games[key].best];if(key==='reaction')return v?fmt(v)+' ms':'—';if(key==='tictactoe')return v===1?'برد':v===0?'مساوی':v===-1?'باخت':'—';if(key==='memory')return v?fmt(v)+' حرکت':'—';return fmt(v||0);}
+  async function startSession(key){const r=await api('/api/session',{game:key});session=r.session;gameSeed=(Number(r.seed)>>>0)||1;gameStarted=performance.now();}
+  async function submit(key,score,proof=''){const duration=Math.max(1,Math.round(performance.now()-gameStarted));try{const r=await api('/api/score',{game:key,session,score,duration_ms:duration,proof});$('result').textContent=`ثبت شد · +${fmt(r.game_xp)} XP بازی · لول ${fmt(r.game_level)}${r.new_best?' · رکورد جدید!':''}`;await refresh();}catch(e){$('result').textContent='رکورد ثبت نشد: '+friendly(e.message);}}
+  function friendly(code){return ({cooldown:'برای ثبت رکورد بعدی کمی صبر کن.',too_fast:'زمان بازی معتبر نبود.',implausible:'رکورد از نظر زمانی معتبر نیست.',invalid_proof:'روند بازی با امتیاز ثبت‌شده مطابقت نداشت؛ رکورد پذیرفته نشد.',session_expired:'نشست بازی منقضی شد؛ دوباره شروع کن.',telegram_auth_failed:'اعتبار تلگرام تأیید نشد.',not_group_member:'برای ثبت رکورد باید عضو همان گروه باشی و بات بتواند عضویتت را بررسی کند.',no_telegram_auth:'بازی را از داخل تلگرام باز کن.'})[code]||'درخواست معتبر نبود؛ دوباره تلاش کن.';}
+  async function startGame(key){clearInterval(timer);clearInterval(reactionTimer);if(cleanupGame){cleanupGame();cleanupGame=null;}reactionReady=false;reactionStart=0;$('playArea').innerHTML='';$('gameStat').textContent='در حال آماده‌سازی…';$('result').textContent='';try{await startSession(key);}catch(e){$('playArea').textContent='برای ثبت رکورد، بازی را از داخل تلگرام باز کن.';$('gameStat').textContent='اتصال لازم است';return;}if(key==='snake')snake();if(key==='memory')memory();if(key==='tictactoe')ttt();if(key==='reaction')reaction();}
+  function seededRng(seed){let x=(Number(seed)>>>0)||1;return()=>{x^=x<<13;x^=x>>>17;x^=x<<5;return x>>>0;};}
+  function snake(){
+    const c=document.createElement('canvas');c.width=320;c.height=320;c.className='game-canvas';$('playArea').append(c);
+    const ctx=c.getContext('2d'),n=20,size=16,rng=seededRng(gameSeed);
+    let body=[{x:9,y:10},{x:8,y:10},{x:7,y:10}],dir={x:1,y:0},next={...dir},food={x:14,y:10},score=0,ended=false,proof='';
+    function foodNew(){do{food={x:rng()%n,y:rng()%n};}while(body.some(p=>p.x===food.x&&p.y===food.y));}
+    function draw(){ctx.fillStyle='#0a2119';ctx.fillRect(0,0,320,320);ctx.fillStyle='#edc978';ctx.fillRect(food.x*size+3,food.y*size+3,10,10);body.forEach((p,i)=>{ctx.fillStyle=i?'#269c70':'#55e0aa';ctx.fillRect(p.x*size+1,p.y*size+1,14,14);});}
+    foodNew();$('gameStat').textContent='امتیاز: ۰';
+    function turn(e){let d=e.key==='ArrowUp'?{x:0,y:-1}:e.key==='ArrowDown'?{x:0,y:1}:e.key==='ArrowLeft'?{x:-1,y:0}:e.key==='ArrowRight'?{x:1,y:0}:null;if(d&&!(d.x===-dir.x&&d.y===-dir.y)){next=d;e.preventDefault();}}
+    window.addEventListener('keydown',turn);cleanupGame=()=>window.removeEventListener('keydown',turn);
+    c.addEventListener('touchstart',e=>{const t=e.changedTouches[0],r=c.getBoundingClientRect(),dx=t.clientX-r.left-r.width/2,dy=t.clientY-r.top-r.height/2;if(!dx&&!dy)return;let d=Math.abs(dx)>Math.abs(dy)?{x:Math.sign(dx),y:0}:{x:0,y:Math.sign(dy)};if(!(d.x===-dir.x&&d.y===-dir.y))next=d;},{passive:true});
+    function step(){if(ended)return;dir=next;proof+=dir.x===1?'R':dir.x===-1?'L':dir.y===1?'D':'U';let head={x:body[0].x+dir.x,y:body[0].y+dir.y};if(head.x<0||head.y<0||head.x>=n||head.y>=n||body.some(p=>p.x===head.x&&p.y===head.y)){ended=true;clearInterval(timer);if(cleanupGame){cleanupGame();cleanupGame=null;}$('gameStat').textContent='پایان · امتیاز: '+fmt(score);submit('snake',score,proof);return;}body.unshift(head);if(head.x===food.x&&head.y===food.y){score++;foodNew();}else body.pop();$('gameStat').textContent='امتیاز: '+fmt(score);draw();}
+    draw();timer=setInterval(step,135);
+  }
+  function memory(){
+    const icons=['🍀','💎','🌙','⭐','🍃','🏆','🔷','🪄'],rng=seededRng(gameSeed);let deck=Array.from({length:16},(_,i)=>i%8);
+    for(let i=deck.length-1;i>0;i--){const j=rng()%(i+1);[deck[i],deck[j]]=[deck[j],deck[i]];}
+    let open=[],matched=0,moves=0,locked=false,proof='';const grid=document.createElement('div');grid.className='memory-grid';$('playArea').append(grid);
+    deck.forEach((v,i)=>{const b=document.createElement('button');b.className='memory-card';b.textContent='?';b.onclick=()=>{if(locked||b.classList.contains('matched')||open.includes(i))return;proof+=i.toString(16);b.textContent=icons[v];b.classList.add('open');open.push(i);if(open.length===2){moves++;$('gameStat').textContent='حرکت‌ها: '+fmt(moves);let [a,z]=open;if(deck[a]===deck[z]){[a,z].forEach(k=>grid.children[k].classList.add('matched'));matched+=2;open=[];if(matched===16){clearTimeout(timer);$('gameStat').textContent='تمام شد · '+fmt(moves)+' حرکت';submit('memory',moves,proof);}}else{locked=true;timer=setTimeout(()=>{[a,z].forEach(k=>{grid.children[k].textContent='?';grid.children[k].classList.remove('open')});open=[];locked=false;},650);}}};grid.append(b);});$('gameStat').textContent='حرکت‌ها: ۰';
+  }
+  function ttt(){
+    let cells=Array(9).fill(null),over=false,playerTurn=true,proof='';const wins=[[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]],grid=document.createElement('div');grid.className='ttt';
+    function result(){for(const [a,b,c] of wins){if(cells[a]&&cells[a]===cells[b]&&cells[b]===cells[c])return cells[a];}return cells.every(Boolean)?'draw':null;}
+    function winningMove(mark){for(let i=0;i<9;i++){if(cells[i]===null){cells[i]=mark;const win=result()===mark;cells[i]=null;if(win)return i;}}return null;}
+    function aiChoice(){let choice=winningMove('O');if(choice===null)choice=winningMove('X');if(choice===null&&cells[4]===null)choice=4;if(choice===null)choice=[0,2,6,8].find(i=>cells[i]===null)??null;if(choice===null)choice=[1,3,5,7].find(i=>cells[i]===null)??null;return choice;}
+    function finish(r){over=true;$('gameStat').textContent=r==='X'?'بردی!':r==='O'?'این دور را رقیب برد.':'مساوی شد.';submit('tictactoe',r==='X'?1:r==='O'?-1:0,proof);}
+    function ai(){const choice=aiChoice();if(choice===null){finish('draw');return;}cells[choice]='O';grid.children[choice].textContent='O';const r=result();if(r)finish(r);else{playerTurn=true;$('gameStat').textContent='نوبت تو · X';}}
+    $('gameStat').textContent='نوبت تو · X';cells.forEach((_,i)=>{const b=document.createElement('button');b.onclick=()=>{if(over||!playerTurn||cells[i]!==null)return;playerTurn=false;proof+=i.toString(16);cells[i]='X';b.textContent='X';const r=result();if(r){finish(r);return;}$('gameStat').textContent='نوبت رقیب…';timer=setTimeout(ai,180);};grid.append(b);});$('playArea').append(grid);
+  }
+  function reaction(){const b=document.createElement('button');b.className='reaction';b.textContent='برای شروع لمس کن';$('playArea').append(b);let waiting=false,ended=false;b.onclick=async()=>{if(ended)return;if(!waiting){waiting=true;b.disabled=true;b.textContent='منتظر علامت سبز بمان…';reactionTimer=setInterval(async()=>{try{const r=await api('/api/reaction/check',{session});if(r.ready){clearInterval(reactionTimer);reactionReady=true;b.disabled=false;b.classList.add('ready');b.textContent='حالا لمس کن!';}}catch(e){clearInterval(reactionTimer);waiting=false;reactionReady=false;b.disabled=false;b.classList.remove('ready');b.textContent='خطا شد؛ دوباره لمس کن';}},220);return;}if(waiting&&reactionReady){ended=true;b.disabled=true;b.textContent='در حال ثبت…';try{const r=await api('/api/reaction/finish',{session});b.textContent=fmt(r.score)+' ms';$('gameStat').textContent='زمان واکنش: '+fmt(r.score)+' ms';$('result').textContent=`ثبت شد · +${fmt(r.game_xp)} XP بازی · لول ${fmt(r.game_level)}${r.new_best?' · رکورد جدید!':''}`;await refresh();}catch(e){$('result').textContent='رکورد ثبت نشد: '+friendly(e.message);}}};}
+  async function refresh(){try{data=await api('/api/bootstrap');$('playerName').textContent=data.user.name||'بازیکن';$('playerLevel').textContent=fmt(data.profile.game_level);$('playerXp').textContent=fmt(data.profile.game_xp);for(const key of Object.keys(games)){$('best-'+key).textContent='بهترین رکورد: '+bestLabel(key);}$('gameBest').textContent='رکورد: '+(currentGame?bestLabel(currentGame):'—');renderBoard(boardGame);setStatus('متصل به گروه');$('authNotice').hidden=true;}catch(e){setStatus('نیازمند تلگرام');$('authNotice').hidden=false;$('leaderboard').textContent='رتبه‌بندی فقط داخل تلگرام در دسترس است.';}}
+  function renderBoard(key){if(!data)return;const rows=data.leaderboards[key]||[];$('leaderboard').innerHTML='';if(!rows.length){$('leaderboard').textContent='هنوز رکوردی ثبت نشده است.';return;}rows.forEach((r,i)=>{const line=document.createElement('div');line.className='leader-row';const rank=document.createElement('span');rank.className='rank';rank.textContent=['🥇','🥈','🥉'][i]||String(i+1);const name=document.createElement('span');name.className='leader-name';name.textContent=r.full_name||('عضو '+r.user_id);const score=document.createElement('span');score.className='leader-score';score.textContent=key==='reaction'?fmt(r.best)+' ms':key==='memory'?fmt(r.best)+' حرکت':key==='tictactoe'?(r.best===1?'برد':r.best===0?'مساوی':'باخت'):fmt(r.best);line.append(rank,name,score);$('leaderboard').append(line);});}
+  Object.keys(games).forEach(key=>{const b=document.createElement('button');b.className='tab'+(key===boardGame?' active':'');b.textContent=games[key].title;b.onclick=()=>{boardGame=key;document.querySelectorAll('.tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');renderBoard(key);};$('boardTabs').append(b);});
+  document.querySelectorAll('[data-game]').forEach(b=>b.addEventListener('click',()=>showGame(b.dataset.game)));$('backBtn').onclick=showHome;$('restartBtn').onclick=()=>currentGame&&startGame(currentGame);$('boardBtn').onclick=()=>{showHome();document.querySelector('#boardTabs').scrollIntoView({behavior:'smooth'});};
+  refresh();
+})();
+</script>
+</body>
+</html>
